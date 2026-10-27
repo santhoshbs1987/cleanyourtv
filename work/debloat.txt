@@ -1,0 +1,43 @@
+# Xiaomi MiTV4I (codename magnolia), Android TV 9 (SDK 28), firmware PI.3698
+# Applied via CleanYourTV debloat procedure
+
+# Xiaomi + Google telemetry & feedback
+com.miui.tv.analytics
+com.xiaomi.statistic
+com.google.android.feedback
+com.google.android.tv.bugreportsender
+com.xiaomo.tv.milegal
+
+# Auto-installs & partner customizer
+android.autoinstalls.config.xiaomi.amelie
+android.autoinstalls.config.xioami.dangal
+com.xiaomi.android.tvsetup.partnercustomizer
+
+# PatchWall, Xiaomi TV+, OEM promo tabs & content rows
+com.mitv.tvhome.atv
+com.mitv.tvhome.mitvplus
+com.mitv.tvhome.oemtab
+com.xm.webcontent
+co.sensara.tv.mitv
+co.sensara.tv.mitv.res
+com.google.android.tvrecommendations
+com.google.android.leanbacklauncher.recommendations
+
+# Background services, cleaner & screensaver
+com.xiaomi.mitv.tvmanager
+com.xiaomi.mitv.updateservice
+com.mitv.milinkservice
+com.google.android.katniss
+com.google.android.speech.pumpkin
+com.google.android.backdrop
+com.mitv.tvlock
+com.google.android.marvin.talkback
+
+# Preloaded unused apps
+com.xiaomi.mimusic2
+com.google.android.play.games
+com.google.android.videos
+
+# Stock launchers (disabled after CleanYourTV launcher is set as Home)
+com.google.android.tvlauncher
+com.google.android.leanbacklauncher
