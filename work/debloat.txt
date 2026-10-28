@@ -35,6 +35,7 @@ com.google.android.marvin.talkback
 
 # Preloaded unused apps
 com.xiaomi.mimusic2
+com.google.android.youtube.tvmusic
 com.google.android.play.games
 com.google.android.videos
 

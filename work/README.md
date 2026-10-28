@@ -9,22 +9,22 @@ Tested and applied on **Xiaomi MiTV4I** (`magnolia`), Android TV 9 (SDK 28), fir
 1. **Full Device Backup**
    - Package lists, disabled package records, `getprop`, and system/global/secure settings backed up to the `backup/` directory.
 
-2. **Debloat (29 Packages Disabled)**
+2. **Debloat (30 Packages Disabled)**
    - **Xiaomi & Google Telemetry:** `com.miui.tv.analytics`, `com.xiaomi.statistic`, `com.google.android.feedback`, `com.google.android.tv.bugreportsender`, `com.xiaomo.tv.milegal`.
    - **Partner Auto-installs:** `android.autoinstalls.config.xiaomi.amelie`, `android.autoinstalls.config.xioami.dangal`, `com.xiaomi.android.tvsetup.partnercustomizer`.
    - **PatchWall & Promos:** `com.mitv.tvhome.atv`, `com.mitv.tvhome.mitvplus`, `com.mitv.tvhome.oemtab`, `com.xm.webcontent`, `co.sensara.tv.mitv`, `co.sensara.tv.mitv.res`, `com.google.android.tvrecommendations`, `com.google.android.leanbacklauncher.recommendations`.
    - **Background Cleaners & Services:** `com.xiaomi.mitv.tvmanager`, `com.xiaomi.mitv.updateservice`, `com.mitv.milinkservice`, `com.google.android.katniss`, `com.google.android.speech.pumpkin`, `com.google.android.backdrop`, `com.mitv.tvlock`, `com.google.android.marvin.talkback`.
-   - **Unused Preloaded Apps:** `com.xiaomi.mimusic2`, `com.google.android.play.games`, `com.google.android.videos`.
+   - **Unused Preloaded Apps:** `com.xiaomi.mimusic2`, `com.google.android.youtube.tvmusic`, `com.google.android.play.games`, `com.google.android.videos`.
    - **Stock Launchers:** `com.google.android.tvlauncher`, `com.google.android.leanbacklauncher`.
 
 3. **Kept Apps & Services (Preserved based on your choices)**
    - **Live TV & Hardware Inputs:** `com.android.tv` (Live TV), `com.droidlogic.tvinput` (HDMI 1–3, AV), `com.droidlogic.droidlivetv`.
-   - **Streaming & Media:** YouTube (`com.google.android.youtube.tv`), YouTube Music (`com.google.android.youtube.tvmusic`), Prime Video (`com.amazon.amazonvideo.livingroom`), Media Player (`com.xiaomi.mitv.mediaexplorer`), Mi Gallery (`com.mitv.gallery`), Mi Video (`com.mitv.videoplayer`).
+   - **Streaming & Media:** YouTube (`com.google.android.youtube.tv`), Prime Video (`com.amazon.amazonvideo.livingroom`), Media Player (`com.xiaomi.mitv.mediaexplorer`), Mi Gallery (`com.mitv.gallery`), Mi Video (`com.mitv.videoplayer`).
    - **Casting & Core OS:** Chromecast built-in (`com.google.android.apps.mediashell`), Gboard, Google Play Store, Play Services, and setup wizard (`com.google.android.tungsten.setupwraith`, which maintains your Wi-Fi credentials).
 
 4. **Apple TV 4K Launcher (CleanYourTV)**
    - Pitch black background.
-   - Rounded frosted dock with 4 apps: **Live TV**, **YouTube**, **Prime Video**, **Media Player**.
+   - Rounded frosted dock with 4 apps: **TV Hub**, **Jellyfin**, **Prime Video**, **SmartTube**.
    - Dynamic ambient glow sampled from the focused app's banner/colors.
    - Top bar with thin clock/date (Outfit font) and frosted glass pills for **Inputs**, **Wi-Fi** (displaying network name), and **Settings**.
    - Glass dropdown under Inputs for one-click switching between HDMI1, HDMI2, HDMI3, AV, and Live TV.
@@ -63,28 +63,28 @@ To re-enable every disabled package and restore the stock Google TV launcher as 
 Edit `launcher/app/src/main/res/values/config.xml`:
 ```xml
 <string-array name="dock_apps">
-    <item>com.android.tv</item>
-    <item>com.google.android.youtube.tv</item>
+    <item>io.github.maxhayim.tvhub</item>
+    <item>org.jellyfin.androidtv</item>
     <item>com.amazon.amazonvideo.livingroom</item>
-    <item>com.xiaomi.mitv.mediaexplorer</item>
+    <item>org.smarttube.stable</item>
 </string-array>
 ```
 Then reinstall with:
 ```bash
-cd launcher && TV_HOST=10.167.27.254:5555 ./build-and-install.sh
+cd launcher && TV_HOST=192.168.68.111:5555 ./build-and-install.sh
 ```
 
 ### Changing Themes or Setting Wallpapers
 You can push themes and wallpapers dynamically without recompiling:
 ```bash
 # Push the dark navy glass theme:
-TV_HOST=10.167.27.254:5555 tools/theme.sh themes/glass
+TV_HOST=192.168.68.111:5555 tools/theme.sh themes/glass
 
 # Push the aurora theme:
-TV_HOST=10.167.27.254:5555 tools/theme.sh themes/aurora
+TV_HOST=192.168.68.111:5555 tools/theme.sh themes/aurora
 
 # Reset back to built-in pure black Apple TV style:
-TV_HOST=10.167.27.254:5555 tools/theme.sh --reset
+TV_HOST=192.168.68.111:5555 tools/theme.sh --reset
 ```
 
 ---
@@ -98,5 +98,5 @@ Leaving port 5555 open on a local network is a security risk. To close ADB:
 4. Restart the TV once.
 5. Verify port 5555 is closed by running:
    ```bash
-   python3 tools/adb-closed.py 10.167.27.254
+   python3 tools/adb-closed.py 192.168.68.111
    ```

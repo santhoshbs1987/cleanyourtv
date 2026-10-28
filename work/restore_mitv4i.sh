@@ -3,7 +3,7 @@
 # Re-enables all debloated packages and restores the stock launcher if desired.
 set -euo pipefail
 
-TV_HOST="${TV_HOST:-10.167.27.254:5555}"
+TV_HOST="${TV_HOST:-192.168.68.111:5555}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
@@ -38,6 +38,7 @@ PKGS=(
   com.mitv.tvlock
   com.google.android.marvin.talkback
   com.xiaomi.mimusic2
+  com.google.android.youtube.tvmusic
   com.google.android.play.games
   com.google.android.videos
   com.google.android.tvlauncher
