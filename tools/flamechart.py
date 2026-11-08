@@ -22,6 +22,7 @@ import argparse
 import colorsys
 import hashlib
 import os
+from pathlib import Path
 import re
 import sys
 
@@ -189,7 +190,10 @@ def draw(panels, rx, title, subtitle, out, width=1600):
                     d.text((x0 + 3, yy + 1), text, fill="white" if s["id"] in hit else "#222", font=small)
             y += h + 26
         y += 10
-    im.save(out)
+    try:
+        im.save(out)
+    except OSError as e:
+        sys.exit(f"cannot write {out}: {e.strerror or e}")
     return im.size
 
 
@@ -269,6 +273,18 @@ def main(argv=None):
         missing = [path for path in paths if not os.path.isfile(path)]
         if missing:
             sys.exit("not a file: " + ", ".join(missing))
+    # A .png name may alias a trace through a symlink or hardlink. Refuse before
+    # starting the engine, including every run a folder could choose as its median.
+    try:
+        target = Path(args.out)
+        for paths in sets:
+            for path in paths:
+                source = Path(path)
+                if target.resolve() == source.resolve() or (target.exists() and target.samefile(source)):
+                    raise ValueError(f"--out {args.out} is the same file as trace {path}")
+    except (OSError, RuntimeError, ValueError) as e:
+        print(f"{e}. No trace was read or written.", file=sys.stderr)
+        return 2
     try:
         import PIL  # noqa: F401
     except ImportError:
@@ -298,4 +314,4 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

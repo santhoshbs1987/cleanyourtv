@@ -1,13 +1,15 @@
 """tools/match.py reads a saved `pm list packages` and counts how the tested lists treat each package.
 
-It reads files only: a package file and a folder of */debloat.txt lists. For each package it prints how
+It reads files only: a package file and a folder of */debloat*.txt lists. For each package it prints how
 many lists disable it, how many name it commented out, and the note those lines give it most often; a
 package disable.sh refuses as one of Android's core packages (#884) is printed as `never`. A packages
 file or examples folder that cannot be used ends the run at 2 with one line, no traceback.
 
 Run from the repository root: python3 -m unittest discover -s tests -v
 """
+import errno
 import io
+import os
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 import subprocess
@@ -123,18 +125,43 @@ class TallyTest(MatchCase):
         counts, _ = match.tally(["com.example.ads"], self.examples)
         self.assertEqual(["com.example.ads"], list(counts))
 
-    def test_only_debloat_txt_one_folder_down_is_read(self):
+    def test_every_list_beside_debloat_txt_is_read(self):
+        # A folder may ship a second list beside debloat.txt - google-chromecast-gtv-4k/debloat-keep-cast.txt,
+        # sony-bravia-4k-ur3/debloat-display-only.txt - and tools/disable.sh applies one like any other, so
+        # the tally reads it too. One folder down only, as before: a bare debloat.txt at the top of
+        # examples/, or a list inside a subfolder, is not one of examples/'s lists.
         self.add_list("a", "com.example.ads\n")
-        (self.examples / "a" / "debloat-extra.txt").write_text("com.example.ads\n")
+        (self.examples / "a" / "debloat-extra.txt").write_text("com.example.ads\ncom.example.extra\n")
         (self.examples / "debloat.txt").write_text("com.example.ads\n")
+        (self.examples / "a" / "nested" / "debloat.txt").parent.mkdir()
+        (self.examples / "a" / "nested" / "debloat.txt").write_text("com.example.ads\n")
+        counts, read = match.tally(["com.example.ads", "com.example.extra"], self.examples)
+        self.assertEqual(2, read)
+        self.assertEqual((2, 0, ""), counts["com.example.ads"])
+        self.assertEqual((1, 0, ""), counts["com.example.extra"])
+
+    def test_a_package_only_a_second_list_disables_is_counted(self):
+        # The shape examples/oppo-k9-55-oppocnm632/debloat-extra.txt has: com.changba.sd is on that list
+        # alone, and the tally printed 0 for it while the tool read debloat.txt only.
+        self.add_list("a", "com.example.ads\n")
+        (self.examples / "a" / "debloat-extra.txt").write_text("com.changba.sd  # karaoke\n")
+        counts, read = match.tally(["com.changba.sd"], self.examples)
+        self.assertEqual(2, read)
+        self.assertEqual((1, 0, "karaoke"), counts["com.changba.sd"])
+
+    def test_a_second_list_counts_as_its_own_list(self):
+        # The counts are per list, as the closing line says, so a package both of a folder's lists carry
+        # reads as two lists rather than one folder.
+        self.add_list("a", "com.example.ads\n")
+        (self.examples / "a" / "debloat-keep-two.txt").write_text("com.example.ads\n")
         counts, read = match.tally(["com.example.ads"], self.examples)
-        self.assertEqual(1, read)
-        self.assertEqual((1, 0, ""), counts["com.example.ads"])
+        self.assertEqual(2, read)
+        self.assertEqual((2, 0, ""), counts["com.example.ads"])
 
     def test_a_folder_without_lists_stops(self):
         with self.assertRaises(SystemExit) as caught:
             match.tally(["com.example.ads"], self.examples)
-        self.assertIn("no */debloat.txt", str(caught.exception.code))
+        self.assertIn("no */debloat*.txt", str(caught.exception.code))
 
     def test_a_list_that_is_a_directory_stops_the_whole_tally(self):
         self.add_list("a", "com.example.ads\n")
@@ -220,7 +247,27 @@ class MainTest(MatchCase):
         code, out, err = self.run_main(str(packages), "--examples", str(self.examples))
         self.assertEqual(2, code)
         self.assertEqual("", out)
-        self.assertIn("no */debloat.txt", err)
+        self.assertIn("no */debloat*.txt", err)
+
+    def test_an_unreadable_directory_refuses_partial_counts(self):
+        self.add_list("a", "com.example.common\n")
+        hidden = self.add_list("b", "com.example.hidden\n").parent
+        packages = self.write("p.txt", "package:com.example.common\npackage:com.example.hidden\n")
+        real_scandir = os.scandir
+        for denied in (self.examples, hidden):
+            with self.subTest(directory=denied.name):
+                def scandir(path):
+                    if Path(path) == denied:
+                        raise PermissionError(errno.EACCES, "Permission denied", str(denied))
+                    return real_scandir(path)
+
+                with mock.patch.object(os, "scandir", side_effect=scandir):
+                    code, out, err = self.run_main(str(packages), "--examples", str(self.examples))
+                self.assertEqual(2, code, out + err)
+                self.assertEqual("", out, "a partial tally must not be presented as complete")
+                self.assertIn(str(denied), err)
+                self.assertIn("Permission denied", err)
+                self.assertNotIn("Traceback", err)
 
     def test_the_default_examples_folder_is_this_checkout(self):
         self.assertEqual(ROOT / "examples", match.EXAMPLES)
@@ -238,6 +285,29 @@ class CommandLineTest(MatchCase):
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertIn("com.example.ads", result.stdout)
         self.assertNotIn("Traceback", result.stderr)
+
+    def test_an_empty_examples_path_uses_the_current_directory(self):
+        self.add_list("a", "com.example.ads  # ads\n# com.example.store  # updates\n")
+        self.add_list("b", "com.example.ads  # ads\ncom.example.store  # updates\n")
+        (self.examples / "a" / "debloat-extra.txt").write_text(
+            "com.example.ads  # alternate\ncom.example.extra  # secondary\n", encoding="utf-8")
+        packages = self.write("p.txt", "package:com.example.ads\npackage:com.example.store\n"
+                                       "package:com.example.extra\npackage:com.example.none\n")
+        previous = os.getcwd()
+        try:
+            os.chdir(self.examples)
+            results = [self.run_script(str(packages), "--examples", root) for root in ("", ".")]
+        finally:
+            os.chdir(previous)
+        for result in results:
+            self.assertEqual(0, result.returncode, result.stderr)
+            self.assertIn("4 packages, counted over 3 lists", result.stderr)
+        self.assertEqual(results[0].stdout, results[1].stdout)
+        rows = {line.split()[0]: line.split()[1:] for line in results[0].stdout.splitlines()[1:]}
+        self.assertEqual({"com.example.ads": ["3", "0", "ads"],
+                          "com.example.extra": ["1", "0", "secondary"],
+                          "com.example.none": ["0", "0"],
+                          "com.example.store": ["1", "1", "updates"]}, rows)
 
     def test_an_unreadable_file_exits_2_without_a_traceback(self):
         result = self.run_script(str(self.base / "gone.txt"), "--examples", str(self.examples))
@@ -267,6 +337,23 @@ class CommandLineTest(MatchCase):
         self.assertEqual(2, result.returncode, result.stdout + result.stderr)
         self.assertNotIn("Traceback", result.stderr)
         self.assertEqual("", result.stdout)
+
+    @unittest.skipUnless(os.name == "posix", "POSIX directory permissions are needed")
+    def test_a_directory_without_read_permission_exits_2(self):
+        if os.geteuid() == 0:
+            self.skipTest("root can enumerate a directory without its read permission")
+        self.add_list("a", "com.example.common\n")
+        hidden = self.add_list("b", "com.example.hidden\n").parent
+        packages = self.write("p.txt", "package:com.example.common\npackage:com.example.hidden\n")
+        hidden.chmod(0)
+        try:
+            result = self.run_script(str(packages), "--examples", str(self.examples))
+        finally:
+            hidden.chmod(0o700)
+        self.assertEqual(2, result.returncode, result.stdout + result.stderr)
+        self.assertEqual("", result.stdout)
+        self.assertIn(str(hidden), result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
 
     def test_the_checkouts_own_examples_are_read_by_default(self):
         packages = self.write("p.txt", "package:com.example.unlikely.to.exist\n")
