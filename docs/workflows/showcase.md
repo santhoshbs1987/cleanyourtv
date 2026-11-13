@@ -13,10 +13,10 @@
    project renamed or repinned in the tables is dropped from the line rather than left there at the commit
    it used to point at.
 2. Bump the count by one everywhere it is stated: `SHOWCASE.md` opens with an `N projects so far.` line,
-   and the "Built something on top?" row carries the same number on five translated front pages -
+   and the "Built something on top?" row carries the same number on six translated front pages -
    `README.md` ("... projects already live") and `README.pt-BR.md` ("que já reúne ... projetos") spell it
-   in words, while `README.de.md`, `README.nl.md`, `README.uk.md` and `README.uz.md` write it in digits,
-   the shape a German compound or an Uzbek classified numeral cannot be read out of.
+   in words, while `README.de.md`, `README.nl.md`, `README.uk.md`, `README.uz.md` and `README.fr.md` write
+   it in digits, the shape a German compound or an Uzbek classified numeral cannot be read out of.
    `tests/test_showcase_project_count.py` counts the rows and reads every page in its COUNT_PAGES table
    with the parser or the digits reader that page needs, and refuses a row that leaves any of them
    behind; a translation that starts stating the count joins that table.
@@ -25,4 +25,6 @@
    nothing beyond what its README says, and is yours or listed with the author's blessing.
 5. Put a screenshot in the PR description; it is linked from the row.
 
-Then run the tests: `python3 -m unittest discover -s tests -v`.
+Then run the tests with the checkout's venv: `tools/venv/bin/python -m unittest discover -s tests -v`.
+[`README.md`'s by-hand block](../../README.md) builds it, and it is where `tools/requirements.txt` puts the
+`adb_shell` and Pillow the suite imports - under the system `python3` those checks skip and the run still says OK.

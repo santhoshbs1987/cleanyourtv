@@ -792,8 +792,22 @@ Things that bit us or contributors, so they don't bite you. Commands use `tools/
   minutes right after power-on and run `pm enable com.cvte.tv.launcher.space` and
   `settings put secure enabled_accessibility_services ""` if it answers (a phone hotspot with the old
   network's name and password stands in for a missing router); wipe the cache partition from the recovery
-  menu. A factory reset also works but erases everything, so it comes last. The prompt now keeps the stock
-  launcher enabled on CVTE boards without a tested list.
+  menu. A factory reset also works but erases everything, so it comes last.
+  The same state came one step earlier on a NOVA 32" (CVTE `Hi3751V350`, Android 14, build
+  `20241015_034630`): `com.cvte.tv.launcher.space` was disabled and FLauncher
+  (`me.efesser.flauncher`) set as Home, and a power cut landed during the reboot that would have
+  applied the two. The panel stays on the animated `WISDOM SHARE smart cloud tv` logo with the
+  network never coming up, so the `adb connect` above answers nothing at all, and the combinations
+  the report tried - Power held 30 s, SOURCE and MENU on the remote, Power together with the
+  remote's Power, F12/F2/Del/Esc, Shift or Ctrl held from power-on - all left it there. No pinhole
+  RESET or SERVICE button is on the set either, and Ctrl+Alt+Del on a USB keyboard reboots it, which
+  is how the kernel and USB input were shown to be alive. Whether the cut finished a boot that would
+  have succeeded, the report cannot say. No recovery combination for a `Hi3751V350` with a single
+  power button has been posted ([#2516](https://github.com/Gathin23/cleanyourtv/issues/2516)), and
+  the factory menu that session had enabled ADB from - `MENU`, then `1147`, then `DEBUG`, as
+  [`examples/sankey-smart-tv-hi3751v350/README.md`](../examples/sankey-smart-tv-hi3751v350/README.md)
+  has it on the same SoC - is drawn by the running TV, so it is no way back in either.
+  The prompt therefore keeps the stock launcher enabled on CVTE boards without a tested list.
 - **Accounts & profiles is empty after the stock launcher is disabled** (TCL 75C845X2, `G08_4K_GB`,
   Google TV 14, [#304](https://github.com/Gathin23/cleanyourtv/discussions/304)). The accounts are still
   there (`dumpsys account` lists them); the page lives in `com.google.android.apps.tv.launcherx`, and while
@@ -1154,6 +1168,14 @@ Things that bit us or contributors, so they don't bite you. Commands use `tools/
   player. They are not packages of their own, so only that package leaves with it. `pm enable com.youview.poa` brought
   them back. How each one launches, and how to give each a Home tile, is in
   [the Sony UK catch-up note](devices/sony-youview-uk-catchup.md).
+- **Channel Up/Down on the real remote lands two channels on**, showing the next channel's banner first
+  (Xiaomi MiTV-MOOQ0, Android TV 11, `RTM4.220307.164.8835`, Spain). Live TV tunes one channel on the key
+  press. On key release it hands the key to its HbbTV layer (`key is handled in hbbtv` in `logcat`), and about
+  1.5 s later the tuner retunes once more by itself (`doNotifyChannelRetuned`). An injected
+  `input keyevent KEYCODE_CHANNEL_UP` moves one channel only, so test with the real remote. Neither the
+  launcher, a key helper nor the debloat caused it, and a full rescan did not fix it. Switching HbbTV off in
+  Live TV's settings menu did. Details in
+  [the MOOQ0 note](devices/xiaomi-mitv-mooq0-android11.md#channel-updown-lands-two-channels-on-hbbtv-spanish-unit-build-8835).
 
 ## Accessibility helper enabled but the remote button does nothing
 
@@ -1246,7 +1268,9 @@ turned off in Settings stays off.
   `INPUT_KEY_SERVICE=1` and press the real button.
   A press that `logcat` reports as `KEY_UNKNOWN` or `KEY_PROGRAM` cannot be matched by keycode at all,
   because every unmapped button shares those codes: use the Linux scancode from
-  `tools/tv.py 'getevent -lt'` in `settings_key_scancodes` and install with `HOME_KEY_SERVICE=1`
+  `tools/tv.py 'getevent -t'` in `settings_key_scancodes` - the hex number after `0001` on the press's
+  line, in decimal (`00f0` is 240), since `-l` prints the key's name in place of that number - and
+  install with `HOME_KEY_SERVICE=1`
   (an RC-36 remote sends its gear on scancode 240 and its notifications button on 362 that way; see
   [the FPD CG50-C3 note](devices/fpd-cg50-c3.md)).
   Not every set answers those two routes, though ([#853](https://github.com/Gathin23/cleanyourtv/issues/853),
@@ -1271,7 +1295,7 @@ turned off in Settings stays off.
   from the shell, so nothing there said which keycode it becomes. `139` in `settings_key_keycodes` did nothing (the report
   took it for `KEYCODE_F8`, which is `138`; `138` was not tried); `66`, the `input-event-codes.h` number for `KEY_F8`, in
   `settings_key_scancodes` opened the launcher's panel with `settings_key_panel`. So read both numbers
-  off one `getevent -lt` press and try the `EV_KEY` one when the `MSC_SCAN` one matches nothing. That
+  off one `getevent -t` press and try the `EV_KEY` one when the `MSC_SCAN` one matches nothing. That
   board also brings the stock launcher back within minutes of `pm disable-user` (the
   `com.xgimi.xrmservice` bullet above), and while it is on, the gear and Home open Google TV.
 - **All vendor buttons die at once** and `logcat` says `GLOBAL_BUTTON ... process is bad`: the
@@ -1282,8 +1306,8 @@ turned off in Settings stays off.
   button makes OEM broadcast receivers (such as Xiaomi's `com.xiaomi.android.tvsetup.partnercustomizer/.GlobalKeyReceiver`)
   launch a market intent to install the missing package, or crash repeatedly.
   To remap it cleanly, put its hardware scancode in `app_keys`: `"scan:<scancode>:<package>"` (e.g.
-  `"scan:399:org.smarttube.stable"` on the Xiaomi Mi Box S, read from `getevent -lt`) and rebuild with
-  `INPUT_KEY_SERVICE=1`.
+  `"scan:399:org.smarttube.stable"` on the Xiaomi Mi Box S, the hex number after `0001` on a
+  `getevent -t` press in decimal: `018f` is 399) and rebuild with `INPUT_KEY_SERVICE=1`.
   **Use the scancode form (`scan:<scancode>`) rather than a raw keycode (`191`):** generic button keycodes
   like `KEYCODE_BUTTON_4` (191) may be shared with other buttons on some remotes/key layouts, so mapping by keycode
   can unintentionally hijack other buttons.
@@ -1302,8 +1326,8 @@ turned off in Settings stays off.
   entry should put it back (read from the launcher's code, not yet tried on a set), because a `scan:` entry is
   answered before the settings branch in
   `HomeKeyService.onKeyEvent`: `"scan:<scancode>:com.sony.dtv.smartui/.settings.SmartSettingsActivity"` in
-  `config.xml`, or in a theme's `app_keys` (find `<scancode>` with `getevent -lt` while pressing the button,
-  as the `scan:` bullet above does for a Sony remote). A keycode entry, `"176:..."` (`KEYCODE_SETTINGS`), is
+  `config.xml`, or in a theme's `app_keys` (find `<scancode>` with `getevent -t` while pressing the button,
+  in decimal, as the `scan:` bullet above says). A keycode entry, `"176:..."` (`KEYCODE_SETTINGS`), is
   also answered before the settings branch, when it has a tap target: a `hold:176:...` entry alone leaves the tap
   to Settings, and a button listed in `settings_key_scancodes` stays Settings (read from the launcher's code, not
   yet tried on a set).
@@ -1648,6 +1672,13 @@ them drop `FLAG_REQUEST_FILTER_KEY_EVENTS` at runtime, so the ramp comes back an
 handled go dead, the same trade without a `settings` write. Write back the exact string the first read
 printed; the empty list also unbinds TalkBack. Bisect, keycodes and limits:
 [the G09 note](devices/tcl-55p71b-g09-key-repeat.md).
+
+A pause keeps both at the price of the first step. On a Xiaomi MOEU0 (Google TV 14) the policy steps once per press
+while a helper filters, and no helper sees the volume keys, so `consume_volume_keys` cannot repeat them. The remote's
+Netflix (289), Prime Video (290) and YouTube (296), Apps and the gear are global keys that never reach a window:
+`mitv.service` starts Netflix and Prime Video by package, and its gear handler is empty. `"volume_pauses_filter":
+true` (the same bool in `config.xml`) makes every volume change stop the filtering for 4 s. The first press steps
+once, a press or hold within those 4 s repeats as usual, and the buttons work again when the pause ends.
 
 Where launcherx is what answers the buttons, keeping it enabled and redirecting its home screen keeps both. On a
 Sony BRAVIA VU3 (`BRAVIA_VU3_4K`, Google TV 14, `UKR1.240726.001`) the Netflix, YouTube, Prime Video and YouTube
@@ -2116,6 +2147,34 @@ tools/tv.py 'settings put global private_dns_mode opportunistic'
 or keep Private DNS and accept that the router's domain rules no longer cover the TV. Write down which one
 you chose, so the next "this one service is slow on the TV" does not start from scratch.
 
+## An app says it can't connect right after the TV wakes from standby
+
+With Private DNS in hostname mode, every lookup waits for the resolver's DNS-over-TLS connection, and strict mode
+never falls back to the router. After standby that connection has to be made again, and until it is, name lookups
+hang while the TV is otherwise online. An app opened in that gap can show its own "Can't connect" screen and stay
+there: on a Sony BRAVIA VU31 (`BRAVIA_VU31_4K`, Google TV 14, `UKR1.240726.001`, Realtek) with `dns.adguard-dns.com`
+in hostname mode, YouTube (`com.google.android.youtube.tv`) showed "Can't connect right now" and did not retry,
+while Wi-Fi was connected, pings by address answered and Play Services logged `NETWORK_ERROR` timeouts.
+Lookups came back 40 seconds to about two minutes after waking, measured three times on one evening. Restarting
+the TV looks like the fix only because it closes the stuck app; the TV's own uptime was not the cause.
+
+To tell, run these straight after waking the TV, before opening anything:
+
+```sh
+tools/tv.py 'ping -c1 -W1 8.8.8.8 | tail -2'             # by address: answers at once
+tools/tv.py 'ping -c1 -W2 www.youtube.com | head -1'     # by name: hangs until the resolver is back
+tools/tv.py 'settings get global private_dns_mode'       # hostname = strict
+```
+
+If the address answers and the name hangs, it is this. Either give the TV a minute after waking before opening
+apps, and close an app that got stuck instead of restarting the TV (Settings > Apps > the app > Force stop, or
+`tools/tv.py 'am force-stop <package>'`), or set the mode back, which lets lookups fall back while the secure
+connection is being made:
+
+```sh
+tools/tv.py 'settings put global private_dns_mode opportunistic'
+```
+
 ## A VPN app on the TV makes strict Private DNS fail every lookup
 
 Hostname mode applies the specifier to the VPN network as well as to Wi-Fi, and with a VPN app connected on
@@ -2275,6 +2334,38 @@ reboot, so it is something to re-apply, not to ship. Confirm with
 Three changes that did **nothing** here, so they are not worth an evening: decoding the backdrop at 720p,
 a hardware layer on a view that invalidates every frame (the layer is re-recorded each frame and costs
 more), and shortening a 1.5 s backdrop crossfade to 0.6 s.
+
+## Home is smooth after a reboot and stutters a few hours later, with nothing else changed
+
+**Seen on:** Xiaomi MiTV-MOEU0 (MediaTek MT9689, Mali-G52), Google TV 14, firmware
+`V816.0.26.3.19.002.ULBMIXM`, a 1920×1080 UI on a 3840×2160 panel at 60 Hz, with this launcher as Home.
+
+The same build, theme and D-pad moves (dock and grid) measured very differently through the day:
+
+| Uptime | `dumpsys gfxinfo` 50th percentile | Janky frames |
+|---|---|---|
+| 3 minutes | 8 ms | 0–0.4% |
+| 25 minutes | 36 ms | 18% |
+| 1 to 6 hours | 40–48 ms | about 45% |
+
+A reboot brought it back to 8 ms every time. **Compare numbers only at a similar uptime**, or a change
+looks better or worse than it is: two builds measured an hour apart can differ more than the change itself.
+
+Nothing on the app or memory side moved it, so these are not worth trying for this symptom: freeing memory
+(three idle apps force-stopped, `MemAvailable` 648 → 877 MB), pausing the audio that was playing,
+`setprop debug.hwui.render_dirty_regions true`, an RGB_565 wallpaper, another theme. `dumpsys thermalservice`
+reported status 0, the CPU stayed at its maximum 1.39 GHz, and SurfaceFlinger's buffers stayed at 23 MB.
+The load average of about 18 on this board is MediaTek driver threads sleeping in `D` state (`ps -A -o
+STAT,NAME | grep "^D"`), not CPU: `/proc/stat` showed the CPU about 93% idle.
+
+**A single frame stays fast; only a continuous animation slows down.** In the slow state a key press with
+`animations` on drew about 20 frames of 40 ms, and with `animations` off it drew one frame of 13–14 ms with
+no janky frames. That points to the GPU or memory clock dropping under sustained load, but the shell cannot
+confirm it: the Mali and DRAM frequency files under `/sys/devices/platform` are not readable.
+
+**The fix that holds all day** is `animations` off, in `config.xml` or a theme (`"animations": false`): the
+focus moves in one frame and there is nothing left to stutter. With animations on, `glow_snap` (true) removes
+the glow's dip-and-fade, the largest single run of full-screen frames per key press on this TV.
 
 ## The Back button stops responding in overlays, or the remote lags, while a third-party launcher's accessibility service is bound
 
