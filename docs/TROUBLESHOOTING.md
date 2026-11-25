@@ -1136,6 +1136,32 @@ Things that bit us or contributors, so they don't bite you. Commands use `tools/
   package that also claims HOME (PatchWall on Xiaomi) makes Android drop the default. The install
   script now picks the known stock launcher among the candidates by itself; otherwise choose one on
   the TV or pass `STOCK_LAUNCHER=<package>`.
+- **Home works after the install, then a later Home press opens Android's chooser with FACTORY MENU in
+  it**, seen on a Hisense HiSmartTV A4 (`xiaoyushan-sa`, Android TV 9, `PTMR.190127.037` /
+  `02.00.00.01`). `launcher/build-and-install.sh` disabled `com.google.android.tvlauncher`, set the new
+  launcher as Home and read it back, and the first Home press opened it. A few seconds later logcat said
+  `Result set changed, dropping preferred activity for Intent { act=android.intent.action.MAIN
+  cat=[android.intent.category.HOME,android.intent.category.DEFAULT] }`, `dumpsys package preferred` showed
+  the new launcher's entry with `mAlways=false`, and the next Home press opened
+  `android/com.android.internal.app.ResolverActivity`. `com.hisense.uifac/.FacRootMenu` claims HOME on this
+  build, and Hisense's PackageManager drops it from some HOME lookups and not others (logcat
+  `[wangbin40]Hisense removing factory`), so the set of Home apps Android compares the default against keeps
+  changing, and Android throws the default away each time. Setting it again with `cmd package
+  set-home-activity` lasted until the next Home press. Do not pick anything in that chooser: it offers the
+  factory menu, and the safety rules say never to open one. What works on that set is keeping the stock
+  launcher, which wins Home on its priority and needs no default:
+  `TV_HOST=<tv ip> tools/tv.py 'pm enable --user 0 com.google.android.tvlauncher'`, then a build with
+  `stock_home_redirect` set to `com.google.android.tvlauncher` and `home_long_press_home` true in
+  `launcher/app/src/main/res/values/config.xml`, installed with
+  `STOCK_LAUNCHER=none HOME_KEY_SERVICE=1 TV_HOST=<tv ip> launcher/build-and-install.sh`. That run ends with
+  `Home resolves to com.google.android.tvlauncher/.MainActivity, not to the new launcher` and exits before its
+  helper step, so `HomeKeyService` has to be switched on the way that step does it
+  (`enabled_accessibility_services`, then `accessibility_enabled 1`); `dumpsys accessibility` then lists it
+  bound. The real Home button opens the new launcher at once, it is still Home after a reboot, and the
+  remote's Input button keeps the stock launcher's inputs panel. The price is the key filter's: a held
+  Volume key steps once per press. Without `home_long_press_home` the helper lets Android handle Home and
+  opens the launcher afterwards, and Android 9 holds app starts for 5 seconds after a Home press, so the
+  stock home shows for that long first.
 - **`tools/restore.sh` leaves the packages an earlier batch disabled off, after the TV changed its
   address mid-cleanup.** The recovery record is one file per list and address
   (`~/.cleanyourtv/recovery-<address>-<list hash>.json`), so a new DHCP lease - a router restart, or
@@ -1207,7 +1233,11 @@ Things that bit us or contributors, so they don't bite you. Commands use `tools/
   was empty. The same package disabled, given 12 seconds, then rebooted stayed at `enabled=3`
   (disabled-user), and so did every batch applied that way. Wait 15 seconds after the last `pm` command
   before rebooting, the same wait the tested lists already describe between batches. It is the
-  package-state counterpart of the lazy app-ops write above.
+  package-state counterpart of the lazy app-ops write above. A `sync` before the reboot does not stand in
+  for the wait: on an A4 on Android TV 9 (`PTMR.190127.037` / `02.00.00.01`), `sync` and the reboot
+  `tools/tv.py --reboot` sends, a few seconds after `tools/disable.sh`, brought all four packages of the
+  batch back, and the same batch given 25 seconds stayed disabled. `sync` flushes what is already on its
+  way to disk, and Android has not written the package state yet.
 - **A firmware update quietly undoes the cleanup.** The update installs over the cleaned-up system, so
   every listed package is enabled again, Home goes back to the stock launcher and new preloads
   appear that no list mentions. `tools/venv/bin/python -I tools/check.py <list>` reports the first
@@ -1265,6 +1295,18 @@ Things that bit us or contributors, so they don't bite you. Commands use `tools/
   player. They are not packages of their own, so only that package leaves with it. `pm enable com.youview.poa` brought
   them back. How each one launches, and how to give each a Home tile, is in
   [the Sony UK catch-up note](devices/sony-youview-uk-catchup.md).
+- **Freeview catch-up apps (iPlayer, ITVx, C4, C5) hang on the spinner, then go black, or answer
+  "Oops... Code: FVP-03-023"** (Philips 43PUS7906/12, `PH0M_EA_T32`, Android TV 11,
+  `TPM215E_R.101.000.198.158`, EU/UK). Not the debloat: the list keeps them, U included. The set's own HbbTV
+  setting **"Block tracking sites"** (Live TV > Options/Menu > HbbTV) blocks the hosts those apps load,
+  so the spinner never resolves and the picture stays black. Turning that setting off fixes all of them,
+  and it survives standby and a reboot once saved - it is there to block those hosts, so that is the
+  trade. The same code after a power cut is a different fault, a Freeview sign-in certificate the
+  server no longer accepts (`mdsclient TLSV1_ALERT_DECRYPT_ERROR` in `logcat`), fixed by
+  `tools/tv.py 'pm clear uk.co.freeview.mdsclient'` - never `uk.co.freeview.fvpconfigauth`, which is
+  the factory Freeview identity. An app that *vanished* instead is the Sony case above. Measured on one
+  unit: the tenth-unit block of
+  [`examples/philips-50pud7406/debloat.txt`](../examples/philips-50pud7406/debloat.txt) has the session.
 - **Channel Up/Down on the real remote lands two channels on**, showing the next channel's banner first
   (Xiaomi MiTV-MOOQ0, Android TV 11, `RTM4.220307.164.8835`, Spain). Live TV tunes one channel on the key
   press. On key release it hands the key to its HbbTV layer (`key is handled in hbbtv` in `logcat`), and about
@@ -1441,7 +1483,7 @@ turned off in Settings stays off.
   `settings_key_keycodes` and `settings_key_scancodes` do not bring the ribbon back on their own: both end in
   `Settings.ACTION_SETTINGS`, and `settings_fallback_components` is read only when that action resolves to
   nothing, which it does not on this set. If the remote reports a scancode for that button, an `app_keys`
-  entry should put it back (read from the launcher's code, not yet tried on a set), because a `scan:` entry is
+  entry should put it back (confirmed with the real remote on a BRAVIA VU31, scancode 204: see examples/sony-bravia-vu31/config.json), because a `scan:` entry is
   answered before the settings branch in
   `HomeKeyService.onKeyEvent`: `"scan:<scancode>:com.sony.dtv.smartui/.settings.SmartSettingsActivity"` in
   `config.xml`, or in a theme's `app_keys` (find `<scancode>` with `getevent -t` while pressing the button,
@@ -1714,6 +1756,34 @@ with the real remote. An `input:com.tcl.channelplus/com.tcl.iptv.service.InputSe
 `live_tv_package` is set, but the direct activity is what was tested here. Find the keycode of a button like
 this one with `tools/tv.py 'logcat -d -v time | grep TclKeyLayoutMap'` while pressing it — `getevent` alone shows
 every TCL remote key as `KEY_UNKNOWN`.
+
+## The TV key does nothing, and TCL's own EPG service answers it (TCL Android TV 11)
+
+**Seen on:** a TCL 40S5400A (`C06`, product `C06_2K_GB`, Android TV 11, build `AR2101` / `AR21`, TCL software
+`V8-T221T05-LF1V361`) with the stock `com.google.android.tvlauncher` disabled and the launcher here as Home, no
+accessibility service bound, and the IR remote `TCL_RC902V_U1`
+([#4282](https://github.com/Gathin23/cleanyourtv/issues/4282)).
+
+The TV key did nothing on Home and Live TV did not open. It is the symptom of the Google TV set above through a
+different chain: on this board `getevent` names the press `KEY_EPG` (every key of that set's remote came back
+`KEY_UNKNOWN` instead), `TclKeyLayoutMap` maps it to keycode **4001**, and TCL's EPG handler answers it and
+stops - it starts `com.tcl.tv/.service.GlobalKeyService`, logs `processKeyCode: keyCode = 4001`, then:
+
+```
+startEpg: topActivityName = com.gathin.tvhome.MainActivity isSpecialScene = false
+startEpg: current is not Freeview Play
+```
+
+So the key is not dropped for want of a target: the guide is started only while Live TV is already in front, and
+on Home there is nothing for it to open. Read `startEpg` first, with
+`tools/tv.py 'logcat -d -v time | grep -i startEpg'` right after the press - that line is what tells this board
+apart from the `TclShortCutKeyManager` one above, which takes the key before any window sees it.
+
+**Fix:** on this unit a Key Mapper rule on key code 4001, action "Launch app" `com.tcl.tv`, with "Don't override
+default action" left on, so the guide still opens inside Live TV. `app_keys` was not tried here, because no key
+helper was bound, so the route the entry above documents is untested on this board rather than ruled out. Whether
+the stock launcher opened Live TV on this key could not be checked after the swap, so a launcher that handles
+keycode 4001 on Home is a request in that issue, not a regression fixed here.
 
 ## The Inputs list shows the empty HDMI 1 as connected, and a device on HDMI 2 nowhere (TCL UnionTV)
 
@@ -2622,3 +2692,49 @@ always reports `mPlugType=1` (`BatteryManager.BATTERY_PLUGGED_AC` in `dumpsys po
 ```sh
 tools/tv.py 'settings put global stay_on_while_plugged_in 0'
 ```
+
+## The TV boots to a blank Home: no launcher answers, and FallbackHome draws nothing
+
+**Seen on:** a Next NEK7 (MECOOL/Amlogic, Android TV 9, SDK 28, `V9.20221214.151020`).
+
+With the enabled Home disabled or unable to start, Android hands Home to
+`com.android.tv.settings/.system.FallbackHome`. On this firmware that activity draws nothing: the screen stayed a
+plain dark panel, `uiautomator dump` returned an empty `FrameLayout` with no children, and no key brought
+anything up. ADB kept working, which is the way back.
+
+Ask the TV which apps answer Home, and check whether the stock fallback is a real launcher or a stub:
+
+```sh
+tools/tv.py 'cmd package query-activities -a android.intent.action.MAIN -c android.intent.category.HOME'
+tools/tv.py 'dumpsys package com.google.android.leanbacklauncher | grep -E "User 0:|enabled="'
+```
+
+A stock launcher that stays out of that list can still be installed and enabled. On the NEK7 the
+`LeanbackLauncher.apk` in `/system/priv-app` is 604 KB with no activities at all: `pm enable` answers
+`new state: enabled` and `dumpsys package` says `enabled=1`, and Home still never goes there. Pull the APK and
+count the activities:
+
+```sh
+adb pull /system/priv-app/LeanbackLauncher/LeanbackLauncher.apk
+$ANDROID_HOME/build-tools/34.0.0/aapt2 dump xmltree --file AndroidManifest.xml LeanbackLauncher.apk | grep -c 'E: activity'
+# 0
+$ANDROID_HOME/build-tools/34.0.0/aapt dump badging LeanbackLauncher.apk | head -1
+# package: name='com.google.android.leanbacklauncher' versionCode='1901105100' ... with no launchable-activity
+```
+
+Recovery, with no reboot needed:
+
+```sh
+tools/tv.py 'pm enable --user 0 <launcher package>'
+tools/tv.py 'am start -a android.intent.action.MAIN -c android.intent.category.HOME'
+```
+
+FallbackHome finishes itself within seconds of a real Home being enabled, and the stored Home preference
+survives a disable/enable cycle, so the launcher answers the next Home press and comes back as default after a
+reboot. A launcher that only crashed needs none of this: Android restarts it on its own (`kill -9` left a new
+pid with the same Home focused seconds later).
+
+Keep one working Home enabled. `tools/disable.sh` already refuses to disable Home's owner while nothing else
+can answer Home, but the guard judges by the apps that answer Home, so a launcher and a stub that never answers
+look the same there: a second launcher installed and enabled, without being the default, is the cheap safety
+net (`pm enable` alone brings the real one back).
